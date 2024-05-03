@@ -18,6 +18,7 @@ import (
 	"github.com/hashicorp/nomad/helper/testlog"
 	"github.com/hashicorp/nomad/nomad/mock"
 	"github.com/hashicorp/nomad/nomad/structs"
+	"github.com/hashicorp/nomad/plugins/csi/fake"
 	"github.com/hashicorp/nomad/plugins/drivers"
 	"github.com/hashicorp/nomad/testutil"
 	"github.com/shoenig/test/must"
@@ -223,10 +224,11 @@ func TestCSIHook(t *testing.T) {
 			alloc.Job.TaskGroups[0].Volumes = tc.volumeRequests
 
 			callCounts := testutil.NewCallCounter()
-			vm := &csimanager.MockVolumeManager{
-				CallCounter: callCounts,
-			}
-			mgr := &csimanager.MockCSIManager{VM: vm}
+
+			fake := fake.Client{}
+			mgr := csimanager.NewMockCSIManager(t,
+				func(*structs.NodeEvent) {}, &fake, "pluginID", "externalID", true)
+
 			rpcer := mockRPCer{
 				alloc:            alloc,
 				callCounts:       callCounts,
@@ -257,7 +259,7 @@ func TestCSIHook(t *testing.T) {
 			}
 
 			if tc.failsFirstUnmount {
-				vm.NextUnmountVolumeErr = errors.New("bad first attempt")
+				fake.NextNodeUnpublishVolumeErr = errors.New("bad first attempt")
 			}
 
 			if tc.expectedClaimErr != nil {
@@ -347,9 +349,10 @@ func TestCSIHook_Prerun_Validation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			alloc.Job.TaskGroups[0].Volumes = volumeRequests
 
-			mgr := &csimanager.MockCSIManager{
-				VM: &csimanager.MockVolumeManager{},
-			}
+			fake := fake.Client{}
+			mgr := csimanager.NewMockCSIManager(t,
+				func(*structs.NodeEvent) {}, &fake, "pluginID", "externalID", true)
+
 			rpcer := mockRPCer{
 				alloc:            alloc,
 				callCounts:       testutil.NewCallCounter(),
